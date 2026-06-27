@@ -23,6 +23,7 @@
 - **Total Size:** 537.38 MB (~0.52 GB)
 - **Number of Classes:** 12
 - **Image Format:** JPEG (.jpg)
+- **Image Resolution:** 640x640 pixels (square)
 - **Annotation Type:** Bounding boxes in YOLO format (normalized)
 - **Annotation Format:** Ultralytics YOLO (.txt per image)
 
