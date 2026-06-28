@@ -20,7 +20,7 @@ AgroPest-12 Image Dataset for Crop Pest Detection/  → dataset (gitignored, 537
 - Kaggle path: `/kaggle/input/datasets/rupankarmajumdar/crop-pests-dataset/`
 - Local path: `AgroPest-12 Image Dataset for Crop Pest Detection/`
 - Full context: `context/AgroPest-12_Dataset_Context.md`
-
+- I will make the notebooks for kaggle which will have 2x T4 gpus
 
 
 
