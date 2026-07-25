@@ -18,6 +18,44 @@ Summer 2026
 
 # **1. Assignment Overview** 
 
+## Project-Specific Dataset Split Amendment — AgroPest-12
+
+**Chosen implementation protocol for this repository:** Preserve the existing
+`AgroPest-12-Cleaned` validation and test splits, and split **only** the existing
+training split. This replaces the merged 10/10/80 re-partition protocol below for
+this group because the dataset contains augmented variants of source images. A new
+image-level re-partition could place transformed versions of the same source image
+in training and validation/test, causing augmentation-family leakage.
+
+The clean dataset contains 13,107 images:
+
+| Partition | Images | % of total | Use |
+|---|---:|---:|---|
+| SSL pool | 9,180 | 70.04% | Pretraining images only; labels are not read |
+| Labelled fine-tuning set | 2,295 | 17.51% | Detector fine-tuning labels |
+| Existing validation split | 1,089 | 8.31% | Early stopping and model selection only |
+| Existing test split | 543 | 4.14% | Final evaluation only |
+
+- The SSL pool and labelled fine-tuning set are a seeded, **disjoint 80/20 split**
+  of the 11,475-image existing training split.
+- The training data is arranged in consecutive groups of three files: one source
+  image and two augmented variants. Treat every sorted consecutive triplet as one
+  indivisible augmentation family; no triplet may cross the SSL pool or labelled
+  fine-tuning partition.
+- Assign the training triplets with a fixed-seed, group-level stratified 80/20
+  split based on each triplet's dominant annotated class. This keeps the class
+  distribution close to the original training distribution in both partitions.
+- Save the triplet assignments, seed, group-level class counts, and final class
+  distribution report in a shared partition manifest used by every Part B notebook.
+- Every SSL method, random-initialisation baseline, and COCO-pretrained baseline
+  must use the same 2,295 labelled images, unchanged validation split, and unchanged
+  test split.
+- The Part A YOLOv12m checkpoint is evaluated on the unchanged original test set as
+  the fully supervised reference. Do not use its test score to make Part B
+  hyperparameter or checkpoint-selection decisions.
+- This is a project-specific deviation from the assignment's merged 10/10/80
+  protocol. Confirm and document instructor approval before submitting Part B.
+
 In **Part A** your group built a five-notebook object detection pipeline (EDA/preprocessing plus one notebook each for YOLOv10, YOLOv12, YOLOv26, and RF-DETR Nano) on the **dataset assigned to your group** . Every model in Part A was trained _fully supervised_ : it consumed 100% of the available bounding-box labels. 
 
 **Part B** asks a research question that dominates modern computer vision practice: 
@@ -477,4 +515,3 @@ CSE 445 _|_ EWU
 Dr. Mohammad Rifat Ahmmad Rashid 
 
 Page 12 
-
