@@ -1,17 +1,5 @@
----------------------------------------------------------------------------
-FileNotFoundError                         Traceback (most recent call last)
-/tmp/ipykernel_58/2424395267.py in <cell line: 0>()
-     33     mounted_inputs = sorted(path.name for path in Path("/kaggle/input").iterdir())
-     34     checked_paths = "\n".join(f"  - {path}" for path in DINOV3_WEIGHT_CANDIDATES)
----> 35     raise FileNotFoundError(
-     36         "Attach the DINOv3 ViT-B/16 weights Kaggle dataset in the notebook's Add Input panel.\n"
-     37         "The AgroPest dataset alone does not include this licensed teacher checkpoint.\n"
-
-FileNotFoundError: Attach the DINOv3 ViT-B/16 weights Kaggle dataset in the notebook's Add Input panel.
-The AgroPest dataset alone does not include this licensed teacher checkpoint.
-Expected filename: dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth
-Checked:
-  - /kaggle/input/dinov3-weigths/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth
-  - /kaggle/input/dinov3-weights/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth
-  - /kaggle/input/datasets/mrifatrashid/dinov3-weigths/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth
-Mounted inputs: ['datasets']
+/kaggle/input/notebooks/sadikshahriar/partb-04a-dinov3-pretrain/partB_04a_dinov3_yolo12m/backbone_only.pt
+/kaggle/input/notebooks/sadikshahriar/partb-04a-dinov3-pretrain/partB_04a_dinov3_yolo12m/best_ssl.pt
+/kaggle/input/notebooks/sadikshahriar/partb-04a-dinov3-pretrain/partB_04a_dinov3_yolo12m/config.json
+/kaggle/input/notebooks/sadikshahriar/partb-04a-dinov3-pretrain/partB_04a_dinov3_yolo12m/dinov3_distillation_loss.png
+/kaggle/input/notebooks/sadikshahriar/partb-04a-dinov3-pretrain/partB_04a_dinov3_yolo12m/yolo12m_dinov3_backbone.pt

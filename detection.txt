@@ -1,0 +1,191 @@
+model = YOLO(best_model_path)
+
+# ------------------------------------------------------------
+# 1. Find 3 test images per class by scanning label files
+# ------------------------------------------------------------
+test_img_dir = os.path.join(CLEANED_PATH, "test", "images")
+test_lbl_dir = os.path.join(CLEANED_PATH, "test", "labels")
+
+class_images = {i: [] for i in range(NUM_CLASSES)}
+for fname in sorted(os.listdir(test_lbl_dir)):
+    if not fname.endswith(".txt"):
+        continue
+    img_stem = os.path.splitext(fname)[0]
+    img_path = None
+    for ext in [".jpg", ".jpeg", ".png"]:
+        candidate = os.path.join(test_img_dir, img_stem + ext)
+        if os.path.exists(candidate):
+            img_path = candidate
+            break
+    if img_path is None:
+        continue
+    lbl_path = os.path.join(test_lbl_dir, fname)
+    with open(lbl_path, "r") as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) >= 5:
+                cid = int(float(parts[0]))
+                if cid in class_images and len(class_images[cid]) < 3:
+                    class_images[cid].append((img_path, lbl_path))
+    if all(len(v) >= 3 for v in class_images.values()):
+        break
+
+print("Images selected per class:")
+for cid in range(NUM_CLASSES):
+    print(f"  {CLASS_NAMES[cid]:>13}: {len(class_images[cid])}")
+
+# ------------------------------------------------------------
+# 2. Run inference on selected images
+# ------------------------------------------------------------
+all_img_paths = []
+for cid in range(NUM_CLASSES):
+    for img_path, _ in class_images[cid]:
+        if img_path not in all_img_paths:
+            all_img_paths.append(img_path)
+
+print(f"\nRunning inference on {len(all_img_paths)} images...")
+inference_results = model.predict(
+    source=all_img_paths,
+    imgsz=IMGSZ,
+    device=DEVICE,
+    conf=0.25,
+    iou=0.5,
+    max_det=MAX_DET,
+    verbose=False,
+)
+
+# Build dict: img_path -> annotated image (BGR numpy array)
+annotated = {}
+for r, ipath in zip(inference_results, all_img_paths):
+    annotated[os.path.basename(ipath)] = r.plot(conf=True, labels=True)
+
+# ------------------------------------------------------------
+# 3. Display 6x6 grid (12 classes x 3 samples = 36 images)
+# ------------------------------------------------------------
+N_ROWS = 6
+N_COLS = 6
+fig, axes = plt.subplots(N_ROWS, N_COLS, figsize=(14, 14))
+axes = axes.flatten()
+
+idx = 0
+for cid in range(NUM_CLASSES):
+    for img_path, _ in class_images[cid]:
+        if idx >= N_ROWS * N_COLS:
+            break
+        img_bgr = annotated.get(os.path.basename(img_path))
+        if img_bgr is not None:
+            img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+            axes[idx].imshow(img_rgb)
+        axes[idx].set_title(CLASS_NAMES[cid], fontsize=7, fontweight='bold',
+                            color=CLASS_COLORS[cid])
+        axes[idx].axis('off')
+        idx += 1
+
+# Hide unused axes
+for j in range(idx, len(axes)):
+    axes[j].axis('off')
+
+plt.tight_layout(pad=0.5)
+plt.subplots_adjust(wspace=0.05, hspace=0.25)
+plt.show()
+
+# ------------------------------------------------------------
+# 4. Correctness log -- per-class prediction accuracy
+# ------------------------------------------------------------
+def compute_iou_log(boxA, boxB):
+    """Compute IoU between two boxes [x1, y1, x2, y2]."""
+    xA = max(boxA[0], boxB[0]); yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2]); yB = min(boxA[3], boxB[3])
+    interArea = max(0, xB - xA) * max(0, yB - yA)
+    if interArea == 0:
+        return 0.0
+    boxAArea = (boxA[2]-boxA[0])*(boxA[3]-boxA[1])
+    boxBArea = (boxB[2]-boxB[0])*(boxB[3]-boxB[1])
+    return interArea / float(boxAArea + boxBArea - interArea)
+
+print("\n" + "=" * 80)
+print("  INFERENCE CORRECTNESS LOG -- Per-Image")
+print("=" * 80)
+
+class_correct = {i: 0 for i in range(NUM_CLASSES)}
+class_missed  = {i: 0 for i in range(NUM_CLASSES)}
+class_total   = {i: 0 for i in range(NUM_CLASSES)}
+
+for cid in range(NUM_CLASSES):
+    for img_path, lbl_path in class_images[cid]:
+        class_total[cid] += 1
+        img = cv2.imread(img_path)
+        if img is None:
+            continue
+        h, w = img.shape[:2]
+
+        # Ground-truth class IDs for this image
+        gt_classes_in_img = set()
+        gt_boxes = []
+        with open(lbl_path, "r") as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) >= 5:
+                    gcls = int(float(parts[0]))
+                    cx, cy, bw, bh = map(float, parts[1:5])
+                    x1 = int((cx - bw/2) * w); y1 = int((cy - bh/2) * h)
+                    x2 = int((cx + bw/2) * w); y2 = int((cy + bh/2) * h)
+                    gt_classes_in_img.add(gcls)
+                    gt_boxes.append((gcls, x1, y1, x2, y2))
+
+        # Predicted class IDs + boxes for this image
+        pred_classes_in_img = set()
+        pred_boxes = []
+        for r, ipath in zip(inference_results, all_img_paths):
+            if os.path.basename(ipath) == os.path.basename(img_path):
+                if r.boxes is not None:
+                    for box_data in r.boxes.data.cpu().numpy():
+                        px1, py1, px2, py2, conf, pcls = box_data
+                        pred_classes_in_img.add(int(pcls))
+                        pred_boxes.append((int(pcls), int(px1), int(py1), int(px2), int(py2)))
+                break
+
+        # Check: does any GT box of class cid match a pred of SAME class at IoU >= 0.5?
+        found = False
+        for gcls, gx1, gy1, gx2, gy2 in gt_boxes:
+            if gcls != cid:
+                continue
+            for pcls, px1, py1, px2, py2 in pred_boxes:
+                if pcls != cid:
+                    continue
+                iou = compute_iou_log([gx1, gy1, gx2, gy2], [px1, py1, px2, py2])
+                if iou >= 0.5:
+                    found = True
+                    break
+            if found:
+                break
+
+        short_name = os.path.basename(img_path)[:35]
+        if found:
+            class_correct[cid] += 1
+            print(f"  [OK]  {CLASS_NAMES[cid]:>13} | {short_name:<35} | GT:{gt_classes_in_img}  Pred:{pred_classes_in_img}")
+        else:
+            class_missed[cid] += 1
+            print(f"  [MISS] {CLASS_NAMES[cid]:>13} | {short_name:<35} | GT:{gt_classes_in_img}  Pred:{pred_classes_in_img}")
+
+# ---- Summary table ----
+print("\n" + "-" * 55)
+header_cols = "Class           Correct  Missed   Accuracy"
+print(f"  {header_cols}")
+print("  " + "-" * 44)
+for cid in range(NUM_CLASSES):
+    total = class_total[cid]
+    if total > 0:
+        acc = class_correct[cid] / total * 100
+        name = CLASS_NAMES[cid]
+        print(f"  {name:<15} {class_correct[cid]:>7} {class_missed[cid]:>7} {acc:>9.1f}%")
+    else:
+        name = CLASS_NAMES[cid]
+        print(f"  {name:<15}       0       0       N/A")
+
+total_correct = sum(class_correct.values())
+total_images  = sum(class_total.values())
+print("  " + "-" * 44)
+overall_label = "OVERALL"
+print(f"  {overall_label:<15} {total_correct:>7} {total_images - total_correct:>7} {total_correct/total_images*100:>9.1f}%")
+print("-" * 55)

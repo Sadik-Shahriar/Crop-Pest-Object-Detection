@@ -109,14 +109,13 @@ Example labelled fine-tuning image path:
 - Keep and cite `partition_manifest.csv`, `class_distribution_report.csv`, and
   `partition_report.json` for reproducibility and report documentation.
 
-## Assignment B: SSL Detection Lab Library Guide
+## Assignment B: Traditional Standalone SSL Implementation
 
-The local reference implementation is `ssl library/`, package name
-`ssl-detection-lab`, Python import name `ssldet`. Read its `README.md` and the
-method-specific tutorial notebook before creating or changing a Part B notebook.
-Do not reuse the older `reference/phase-1-self-supervised-learning-simclr.ipynb`
-implementation: it uses an outdated custom Lightning/Lightly pipeline rather than
-the current course library. Its nearest-neighbour sanity-check idea is useful.
+The professor approved a traditional, self-contained PyTorch implementation for
+Part B. Do **not** install, import, or depend on `ssl library/`,
+`ssl-detection-lab`, `ssldet`, Lightly, or PyTorch Lightning. Keep the course
+mechanisms and experimental protocol, but implement the data pipeline, SSL
+objective, training loop, checkpoint handoff, and diagnostics directly.
 
 ### Installation and Runtime
 
@@ -127,68 +126,45 @@ subprocess.check_call([
     sys.executable, "-m", "pip", "install", "-q", "--upgrade",
     "ultralytics>=8.4.96", "scikit-learn", "seaborn",
 ])
-subprocess.check_call([
-    sys.executable, "-m", "pip", "install", "-q", "--upgrade", "--no-deps",
-    "git+https://github.com/rifat963/ssl-detection-lab.git@main",
-])
 ```
 
 - Keep Kaggle's CUDA-matched PyTorch installation; do not install a standalone
-  CPU PyTorch wheel.
-- The library requires Python 3.10+, PyTorch 2.4+, torchvision 0.19+, and
-  Ultralytics 8.4.96+.
-- At notebook startup run
-  `assert_supported_runtime(require_cuda=True, minimum_gpus=2)`.
-- Use dual-GPU launch via `launch_distributed_pretrain`; `batch_size` in
-  `PretrainConfig` is **per GPU**.
-- Write all generated files to `/kaggle/working/`, never `/kaggle/input/`.
+  PyTorch wheel.
+- Require Python 3.10+, PyTorch 2.4+, torchvision 0.19+, Ultralytics 8.4.96+,
+  CUDA, and two visible T4 GPUs before launching DDP.
+- Use `python -m torch.distributed.run --standalone --nproc_per_node=2` for
+  dual-GPU training. The batch-size CONFIG value is **per GPU**.
+- Use NCCL, `DistributedSampler`, `DistributedDataParallel`, AMP, finite-loss
+  checks, gradient clipping, and rank-zero-only checkpoint/history writes.
+- Write all generated scripts, checkpoints, plots, and reports to
+  `/kaggle/working/`, never `/kaggle/input/`.
 
-### Core Library APIs
+### Traditional Implementation Requirements
 
-```python
-from ssldet import (
-    PretrainConfig,
-    assert_supported_runtime,
-    launch_distributed_pretrain,
-    transfer_ssl_backbone_to_yolo,
-)
-from ssldet.backbones import YOLOBackboneEncoder
-from ssldet.data import UnlabeledImageDataset, build_transform
-```
-
-- `PretrainConfig` is the single source of truth for all SSL parameters. Call
-  `.validate()` before launching training.
-- `launch_distributed_pretrain(config, num_processes=2, config_path=...)` writes
-  the YAML configuration and invokes one DDP process per GPU.
-- `YOLOBackboneEncoder` wraps the real YAML-defined Ultralytics backbone. Its
-  global pooled output is used by SimCLR/BYOL; `forward_feature_map()` is used by
-  I-JEPA and DINOv3 distillation.
-- `UnlabeledImageDataset` opens image pixels only. Never construct it from a
-  validation/test path in a pretraining notebook.
-- `build_transform(config)` selects the current library's method-specific views
-  or masking pipeline. Always show an augmentation/mask preview before training.
-- `transfer_ssl_backbone_to_yolo(best_ssl.pt, output.pt, yolo_model=..., minimum_coverage=0.95)`
-  creates a detector-compatible checkpoint and a `.transfer.json` mapping report.
-  It transfers only the online/student encoder, not the projection head, predictor,
-  teacher/target, optimizer, scheduler, or detector neck/head.
-
-### Current Pretraining Outputs
-
-The standard trainer writes these under the configured `output_dir`:
-
-```text
-best_ssl.pt                    # Lowest SSL-loss complete state; use for handoff
-last_ssl.pt                    # Latest resumable complete state
-history.csv                    # Epoch loss, LR, time, EMA momentum
-run_manifest.json              # Config, initialization, output paths, best loss
-<method>_pretrained_<model>.pt # Final detector-compatible model from training
-```
-
-- Prefer `best_ssl.pt` for downstream weight surgery because it corresponds to the
-  lowest SSL loss. Create and publish a detector-compatible copy from it with
-  `transfer_ssl_backbone_to_yolo`.
+- Keep every parameter in one fully commented CONFIG cell. Every value must be
+  explainable during viva.
+- Wrap the actual YAML-defined Ultralytics backbone. Preserve YOLO graph routing
+  through each layer's `f`, `i`, and model `save` attributes; do not approximate
+  the backbone with a fixed `nn.Sequential` layer slice.
+- Build image-only datasets directly from `ssl_pool/images`; never construct or
+  inspect label, validation, or test paths in a pretraining notebook.
+- Build two independent SimCLR views with TorchVision transforms and show an
+  augmentation preview before training.
+- Implement NT-Xent directly: concatenate the two normalized view embeddings,
+  mask self-similarities, and use each view's paired augmentation as its target.
+- State whether negatives are local or global. The standard standalone SimCLR
+  implementation uses local negatives: with source batch `B` per GPU, each anchor
+  has `2B - 2` local negatives. Gradient accumulation does not add simultaneous
+  negatives.
+- Use a projection MLP only for the SSL objective. Transfer only the encoder;
+  never transfer the projector, optimizer, scheduler, detector neck, or detector
+  head.
+- Save `best_ssl.pt` for the lowest epoch SSL loss, `last_ssl.pt` for resuming,
+  `history.csv`, `run_manifest.json`, a backbone-only checkpoint, and a
+  detector-compatible checkpoint plus JSON transfer report. Enforce 100% backbone
+  key/shape coverage during export rather than silently loading partial weights.
 - Publish the complete output directory as a Kaggle dataset so the paired `*b`
-  notebook can attach the exact checkpoint and manifest.
+  notebook can attach the exact checkpoint, config, manifest, and transfer report.
 
 ### Model and Method Rules
 
@@ -203,36 +179,21 @@ run_manifest.json              # Config, initialization, output paths, best loss
   method-specific and must be justified. Downstream resolution, batch size,
   optimizer/schedule, augmentations, seed, and evaluation settings must remain
   identical across methods.
-- SimCLR's in-batch negatives are local to each DDP process in the current library;
+- SimCLR's in-batch negatives are local to each DDP process in the standalone
+  implementation;
   gradient accumulation does not add simultaneous negatives. State the per-GPU
   batch size and local contrastive batch in the CONFIG explanation.
 
-### Required Notebook References
+### Implementation References
 
-Read the matching current tutorial before implementation:
-
-| Part B notebook | Primary local tutorial/reference |
-|---|---|
-| `01a` SimCLR pretrain | `ssl library/output/jupyter-notebook/simclr_football_t4x2_tutorial.ipynb` |
-| `01b` SimCLR downstream | `ssl library/output/jupyter-notebook/simclr_yolo26_football_downstream_tutorial.ipynb` |
-| `02a` BYOL pretrain | `ssl library/output/jupyter-notebook/byol_football_t4x2_tutorial.ipynb` |
-| `03a` I-JEPA pretrain | `ssl library/output/jupyter-notebook/ijepa_yolo26_football_ssl_tutorial.ipynb` |
-| `03b` I-JEPA downstream | `ssl library/output/jupyter-notebook/ijepa_yolo26_downstream_tutorial.ipynb` |
-| `04a` DINOv3 pretrain | `ssl library/output/jupyter-notebook/dinov3_yolo26_football_ssl_tutorial.ipynb` |
-| `04b` DINOv3 downstream | `ssl library/output/jupyter-notebook/dinov3_yolo26_downstream_tutorial.ipynb` |
-
-Additional implementation references:
-
-```text
-ssl library/examples/simclr_t4x2.yaml
-ssl library/examples/ijepa_t4x2.yaml
-ssl library/examples/dinov3_yolo26_t4x2.yaml
-ssl library/src/ssldet/config.py
-ssl library/src/ssldet/trainer.py
-ssl library/src/ssldet/downstream.py
-ssl library/src/ssldet/data.py
-ssl library/src/ssldet/methods/
-```
+- `phase-1-ssl-224-simclr.ipynb` for the simple SimCLR notebook flow and
+  augmentation-preview idea. Do not copy its dependency workaround, COCO
+  initialization, or fixed sequential YOLO slice.
+- `cse445-simclr-yolo26-football-player-detection.ipynb` for a direct encoder,
+  projector, NT-Xent, curve, and checkpoint pattern. Adapt the model and dataset
+  paths to YOLOv12m and AgroPest-12 Part B.
+- The Part B assignment, partition manifest, class-distribution report, and
+  partition report remain the source of truth for dataset use and fairness.
 
 ### Pretraining Notebook Checklist
 
