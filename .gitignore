@@ -1,3 +1,22 @@
+# Datasets and heavy binary files
+AgroPest-12 Image Dataset for Crop Pest Detection/
 AgroPest-12 Image Dataset for Crop Pest Detection
-
+ssl library/
 ssl library
+
+# Video archives & temporary outputs
+*.zip
+*.tar.gz
+*.mp4
+*.avi
+
+# Scratch & checkpoints
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+scratchpad*.ipynb
+scratch/
+
+# OS metadata
+.DS_Store
+Thumbs.db

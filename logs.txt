@@ -1,5 +1,0 @@
-/kaggle/input/notebooks/sadikshahriar/partb-04a-dinov3-pretrain/partB_04a_dinov3_yolo12m/backbone_only.pt
-/kaggle/input/notebooks/sadikshahriar/partb-04a-dinov3-pretrain/partB_04a_dinov3_yolo12m/best_ssl.pt
-/kaggle/input/notebooks/sadikshahriar/partb-04a-dinov3-pretrain/partB_04a_dinov3_yolo12m/config.json
-/kaggle/input/notebooks/sadikshahriar/partb-04a-dinov3-pretrain/partB_04a_dinov3_yolo12m/dinov3_distillation_loss.png
-/kaggle/input/notebooks/sadikshahriar/partb-04a-dinov3-pretrain/partB_04a_dinov3_yolo12m/yolo12m_dinov3_backbone.pt

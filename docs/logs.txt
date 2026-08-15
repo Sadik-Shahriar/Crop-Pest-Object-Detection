@@ -1,0 +1,3 @@
+/kaggle/input/notebooks/sadikshahriar/notebook3-yolov12/yolov12_agropest_best.pt
+/kaggle/input/notebooks/sadikshahriar/notebook3-yolov12/agropest_yolov12_train/yolov12_agropest/weights/best.pt
+/kaggle/input/notebooks/sadikshahriar/notebook3-yolov12/agropest_yolov12_train/yolov12_agropest/weights/last.pt
